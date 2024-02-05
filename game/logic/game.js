@@ -1,183 +1,106 @@
 export class Game extends Phaser.Scene {
     constructor() {
-        super({ key: 'game' });
+        super({ key: 'GameScene' });
         this.player = null;
-        this.socket = new WebSocket('ws://127.0.0.1:3000');
         this.otherPlayers = {};
-        this.cursors = null;
-        this.playerNameText = {};
-        this.isSecondPlayer = false;
+        this.playerId = this.generateUUID();
+    }
+
+    preload() {
     }
 
     create() {
-        this.setupWebSocketListeners();
-        this.initializeControls();
-    }
+        this.player = this.add.sprite(100, 100, 'player');
 
-    createPlayer() {
-        console.log("holap")
-        let startPosition;
-        if (!this.isSecondPlayer) {
-            startPosition = { x: 450, y: 150 };
-        } else {
-            startPosition = { x: 450, y: 750 };
-        }
-
-        this.player = this.physics.add.sprite(startPosition.x, startPosition.y, 'playerSprite');
-
-        this.initializeVisionRange();
-        this.initializeControls();
-        this.setupWebSocketListeners();
-    }
-
-
-
-    initializeVisionRange() {
-        this.graphics = this.add.graphics({ lineStyle: { width: 2, color: 0xff0000 } });
-        this.rangoDeVision = new Phaser.Geom.Circle(this.player.x, this.player.y, 100);
-        this.graphics.strokeCircleShape(this.rangoDeVision);
-    }
-
-    initializeControls() {
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.input.on('pointerdown', () => this.movePlayer());
+
+        this.setupWebSocketListeners();
     }
 
     setupWebSocketListeners() {
-        this.socket.onopen = () => {
-            this.sendPlayerPosition(this.player.x, this.player.y);
-        };
+        const socket = new SockJS('http://localhost:8080/gs-guide-websocket');
+        this.stompClient = Stomp.over(socket);
+        this.stompClient.debug = () => { };
 
-        this.socket.onmessage = event => {
-            const data = JSON.parse(event.data);
-            switch (data.type) {
-                case 'playerId':
-                    if (!this.player) {
-                        this.playerId = data.id;
-                        this.isSecondPlayer = data.isSecondPlayer;
-                        let startPosition;
-                        if (!this.isSecondPlayer) {
-                            startPosition = { x: 450, y: 150 };
-                        } else {
-                            startPosition = { x: 450, y: 750 };
-                        }
-                        this.createPlayer(startPosition);
-                    }
-                    break;
-                case 'playerPositionUpdate':
-                    this.updateOtherPlayerPosition(data.playerId, data.position);
-                    break;
-                case 'playerDisconnected':
-                    this.handlePlayerDisconnected(data.id);
-                    break;
-                default:
-                    console.log('Unknown message type:', data.type);
+        this.stompClient.connect({}, (frame) => {
+            console.log('Conectado: ' + frame);
+
+            // Registro  para obtener el estado actual
+            this.stompClient.send("/app/register", {}, JSON.stringify({ playerId: this.playerId, x: this.player.x, y: this.player.y }));
+
+            // Suscribirse para recibir actualizaciones de posición de los jugadores
+            this.stompClient.subscribe('/topic/playerMoves', (message) => {
+                const players = JSON.parse(message.body);
+                players.forEach(player => {
+                    this.updateOtherPlayerPosition(player);
+                });
+            });
+
+            // Suscribirse para recibir notificaciones cuando un jugador se desconecta
+            this.stompClient.subscribe('/topic/playerDisconnected', (message) => {
+                const disconnectedPlayerId = JSON.parse(message.body);
+                this.removePlayer(disconnectedPlayerId);
+            });
+
+        });
+    }
+
+
+
+    updateOtherPlayerPosition(playerUpdate) {
+        if (playerUpdate.playerId !== this.playerId) {
+            if (!this.otherPlayers[playerUpdate.playerId]) {
+                // Crear un nuevo sprite para otro jugador si aún no existe
+                this.otherPlayers[playerUpdate.playerId] = this.add.sprite(playerUpdate.x, playerUpdate.y, 'player');
+            } else {
+                // Actualizar la posición del sprite de otro jugador
+                this.otherPlayers[playerUpdate.playerId].setPosition(playerUpdate.x, playerUpdate.y);
             }
-        };
-    }
-
-    movePlayer() {
-        this.sendPlayerPosition(this.player.x, this.player.y);
-    }
-
-    sendPlayerPosition(x, y) {
-        if (this.socket.readyState === WebSocket.OPEN) {
-            const data = {
-                type: 'playerPositionUpdate',
-                playerId: this.playerId,
-                position: { x, y }
-            };
-            this.socket.send(JSON.stringify(data));
-        } else {
-            console.log('WebSocket no está en estado OPEN');
-        }
-    }
-
-
-    updateOtherPlayerPosition(playerId, position) {
-        if (!this.otherPlayers[playerId]) {
-            this.otherPlayers[playerId] = this.physics.add.sprite(position.x, position.y, 'playerSprite').setVisible(false);
-        } else {
-            this.otherPlayers[playerId].x = position.x;
-            this.otherPlayers[playerId].y = position.y;
-        }
-        this.otherPlayers[playerId].setVisible(true);
-    }
-
-
-
-    handlePlayerDisconnected(playerId) {
-        if (this.otherPlayers[playerId]) {
-            this.otherPlayers[playerId].destroy();
-            delete this.otherPlayers[playerId];
         }
     }
 
     update() {
-        this.updateVisionRange();
-        this.handlePlayerMovement();
-        this.handleVisibilityOfOtherPlayers();
-        if (this.playerNameText[this.playerId]) {
-            this.playerNameText[this.playerId].setPosition(this.player.x, this.player.y - 20);
-        }
-    }
-
-    updateVisionRange() {
-        if (this.player) {
-            // Elimina el círculo anterior si existe
-            if (this.graphics) {
-                this.graphics.clear();
-            }
-
-            // Crea un nuevo círculo en la posición actual del jugador
-            this.rangoDeVision = new Phaser.Geom.Circle(this.player.x, this.player.y, 100);
-
-            // Dibuja el nuevo círculo
-            this.graphics = this.add.graphics({ lineStyle: { width: 2, color: 0xff0000 } });
-            this.graphics.strokeCircleShape(this.rangoDeVision);
-
-            // Asegurémonos de que this.playerNameText[this.playerId] esté definido
-            if (this.playerNameText[this.playerId]) {
-                this.playerNameText[this.playerId].setPosition(this.player.x, this.player.y - 20);
-                this.playerNameText[this.playerId].setText(this.playerId);
-            }
-        }
-    }
-
-
-
-    handlePlayerMovement() {
-        let velocityX = 0;
-        let velocityY = 0;
-
+        let moved = false;
         if (this.cursors.left.isDown) {
-            velocityX = -200;
+            this.player.x -= 5;
+            moved = true;
         } else if (this.cursors.right.isDown) {
-            velocityX = 200;
+            this.player.x += 5;
+            moved = true;
         }
 
         if (this.cursors.up.isDown) {
-            velocityY = -200;
+            this.player.y -= 5;
+            moved = true;
         } else if (this.cursors.down.isDown) {
-            velocityY = 200;
+            this.player.y += 5;
+            moved = true;
         }
 
-        if (this.player) {
-            this.player.setVelocityX(velocityX);
-            this.player.setVelocityY(velocityY);
-
-            this.sendPlayerPosition(this.player.x, this.player.y);
+        if (moved) {
+            this.sendPlayerPosition();
         }
-
-
     }
 
-    handleVisibilityOfOtherPlayers() {
-        Object.keys(this.otherPlayers).forEach(id => {
-            const otherPlayer = this.otherPlayers[id];
-            const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, otherPlayer.x, otherPlayer.y);
-            otherPlayer.setVisible(distance <= 100);
+    sendPlayerPosition() {
+        if (this.stompClient && this.stompClient.connected) {
+            const message = { playerId: this.playerId, x: this.player.x, y: this.player.y };
+            this.stompClient.send("/app/playerMove", {}, JSON.stringify(message));
+        }
+    }
+
+    generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            let r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
         });
+    }
+
+    removePlayer(disconnectedPlayerId) {
+        if (this.otherPlayers[disconnectedPlayerId])
+            this.otherPlayers[disconnectedPlayerId].destroy();
+        delete this.otherPlayers[disconnectedPlayerId];
+
     }
 
 }
