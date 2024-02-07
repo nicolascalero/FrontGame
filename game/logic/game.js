@@ -14,6 +14,10 @@ export class Game extends Phaser.Scene {
 
         this.cursors = this.input.keyboard.createCursorKeys();
 
+        this.input.on('pointerdown', (pointer) => {
+            this.shootBullets(pointer.worldX, pointer.worldY);
+        });
+
         this.setupWebSocketListeners();
     }
 
@@ -41,6 +45,14 @@ export class Game extends Phaser.Scene {
                 const disconnectedPlayerId = JSON.parse(message.body);
                 this.removePlayer(disconnectedPlayerId);
             });
+
+            this.stompClient.subscribe('/topic/shoots', (message) => {
+                const shootInfo = JSON.parse(message.body);
+                if (shootInfo.playerId !== this.playerId) {
+                    this.shootUpdateOther(shootInfo)
+                }
+            });
+
 
         });
     }
@@ -95,6 +107,31 @@ export class Game extends Phaser.Scene {
             return v.toString(16);
         });
     }
+
+    shootBullets(destX, destY) {
+        let bullet = this.add.circle(this.player.x, this.player.y, 5, 0x0000000);
+        this.physics.add.existing(bullet);
+
+        this.physics.moveTo(bullet, destX, destY, 600);
+
+        const shootInfo = {
+            playerId: this.playerId,
+            fromX: this.player.x,
+            fromY: this.player.y,
+            x: destX,
+            y: destY
+        };
+        this.stompClient.send("/app/shoot", {}, JSON.stringify(shootInfo));
+    }
+
+
+    shootUpdateOther(shootInfo) {
+        let bullet = this.add.circle(shootInfo.fromX, shootInfo.fromY, 5, 0x0000000);
+        this.physics.add.existing(bullet);
+        this.physics.moveTo(bullet, shootInfo.x, shootInfo.y, 600);
+    }
+
+
 
     removePlayer(disconnectedPlayerId) {
         if (this.otherPlayers[disconnectedPlayerId])
