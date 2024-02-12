@@ -1,16 +1,23 @@
-document.getElementById('loginButton').addEventListener('click', function () {
-    const usernameInput = document.getElementById('username');
-    const username = usernameInput.value.trim(); // Obtén el valor del nombre de usuario sin espacios en blanco al inicio y al final
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('createGame').addEventListener('click', function () {
+        const username = document.getElementById('name').value;
+        if (username) {
+            fetch('http://localhost:8080/partidas/crear_partida', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username: username })
+            })
 
-    if (username !== '') {
-        localStorage.setItem("name", username);
-        // Redirige al usuario a la página "game.html" antes de limpiar el campo
-        window.location.href = '/game/game.html';
-
-        // Limpia el campo de entrada después de la redirección
-        usernameInput.value = '';
-    } else {
-        // El campo de nombre de usuario está vacío, muestra un mensaje de error y mantén el texto ingresado
-        alert('Por favor, ingresa un nombre de usuario válido.');
-    }
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Partida creada con éxito, código de partida:', data.gameCode);
+                    window.location.href = '/game/game.html';
+                })
+                .catch((error) => {
+                    console.error('Error al crear partida:', error);
+                });
+        }
+    });
 });
