@@ -30,13 +30,13 @@ body {
 }
 
 .welcome-message {
-    font-size: 3em;
+    font-size: 2.5rem;
     margin-bottom: 2rem;
     font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
 }
 
 input[type="text"] {
-    width: 25rem;
+    width: 15rem;
     padding: 15px;
     margin-bottom: 4rem;
     margin-top: 2rem;

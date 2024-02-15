@@ -1,0 +1,48 @@
+html,
+body {
+    height: 100%;
+    margin: 0;
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+body {
+    background-image: url('../assets/background.png');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.background {
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+
+.menu-title {
+    font-size: 32px;
+    color: white;
+    margin-bottom: 40px;
+}
+
+.menu-option {
+    padding: 20px 40px;
+    margin: 20px 0;
+    cursor: pointer;
+    width: auto;
+    text-align: center;
+    border-radius: 15px;
+    color: white;
+    background-color: rgb(35, 73, 156);
+    transition: background-color 0.3s, transform 0.3s;
+    font-size: 20px;
+}
+
+.menu-option:hover {
+    background-color: rgb(25, 43, 83);
+    transform: scale(1.05);
+}

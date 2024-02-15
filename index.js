@@ -1,23 +1,26 @@
-document.addEventListener('DOMContentLoaded', function () {
-    document.getElementById('createGame').addEventListener('click', function () {
-        const username = document.getElementById('name').value;
-        if (username) {
-            fetch('http://localhost:8080/partidas/crear_partida', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ username: username })
-            })
-
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Partida creada con éxito, código de partida:', data.gameCode);
-                    window.location.href = '/game/game.html';
-                })
-                .catch((error) => {
-                    console.error('Error al crear partida:', error);
-                });
-        }
-    });
+document.addEventListener("DOMContentLoaded", function () {
+    localStorage.clear();
 });
+
+
+function goToGameMenu() {
+    const name = document.getElementById('nameInput').value;
+
+    if (name === "") {
+        alertErrorName();
+    } else {
+        localStorage.setItem('userName', name);
+        document.getElementById('nameInput').value = "";
+        window.location.href = './menu-game/index.html';
+    }
+}
+
+function alertErrorName() {
+    Swal.fire({
+        icon: "error",
+        title: "Oops...",
+        text: "¡El nombre es necesario!",
+        showCloseButton: true
+    });
+}
+
