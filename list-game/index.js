@@ -11,6 +11,8 @@ function connectAndFetchData(offset, limit) {
     stompClient.connect({}, function () {
         stompClient.subscribe('/topic/listInstance', function (response) {
             const data = JSON.parse(response.body);
+            data.records = getFirstRecordOfEachGameId(data.records);
+            console.log('data', data);
             if (isOwner(data.records)) {
                 this.loadInMemory(data.records)
                 updateUI(data.records, data.totalRecords, data.pageSize, data.pageNumber);
@@ -21,7 +23,16 @@ function connectAndFetchData(offset, limit) {
     });
 }
 
-//detectar si el name que viene en el data.records es el mismo que el name
+
+function getFirstRecordOfEachGameId(records) {
+    const firstRecords = {};
+    records.forEach(record => {
+        if (!firstRecords[record.gameId]) {
+            firstRecords[record.gameId] = record;
+        }
+    });
+    return Object.values(firstRecords);
+}
 
 function isOwner(records) {
     return records.some(record => record.owner === userName);
@@ -34,7 +45,6 @@ function loadInMemory(records) {
     stompClient.connect({}, function () {
         stompClient.subscribe('/topic/loadGame', function (response) {
             const data = JSON.parse(response.body);
-            console.log('data', data);
         });
 
         records.forEach(element => {
