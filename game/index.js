@@ -1,4 +1,4 @@
-import { Game } from './logic/game.js';
+import { Game, VistaLateral } from './logic/game.js';
 
 
 
@@ -20,7 +20,7 @@ const config = {
             target: 60,
         }
     },
-    scene: [Game],
+    scene: [Game, VistaLateral],
     scale: {
         mode: Phaser.Scale.Center,
         autoCenter: Phaser.Scale.Center

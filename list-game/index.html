@@ -6,18 +6,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Listar Juegos - Próximamente</title>
     <link rel="stylesheet" href="style.css">
-    <script src="./index.js"></script>
 </head>
 
 <body>
 
-    <div class="container">
-        <div class="mensaje">Próximamente
-            <span class="dot">.</span>
-            <span class="dot">.</span>
-            <span class="dot">.</span>
-        </div>
+    <div>
+        <div id="game-container"></div>
+        <div id="game-empty-container"></div>
+        <div id="paginate"></div>
     </div>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script src="./index.js"></script>
+
 </body>
 
 </html>

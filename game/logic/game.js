@@ -1,5 +1,5 @@
 
-
+import elementsGame from "../models/elementsGame.js";
 
 
 export class Game extends Phaser.Scene {
@@ -12,9 +12,11 @@ export class Game extends Phaser.Scene {
         this.playerId = this.generateUUID();
         this.targetDestinations = new Map();
         this.redTeamInitialized = false;
+        this.blueTeamInitialized = false;
         this.selectedCircle = false;
         this.isShooting = false;
         this.code = null;
+        this.joinMethod = false;
         this.name = null;
         this.isOwner = false;
         this.militaryEquipmentsBlue = [];
@@ -31,15 +33,45 @@ export class Game extends Phaser.Scene {
         this.darkenRectangle = null;
         this.fightTextShown = null;
         this.unitVisionRanges = {};
+        this.elementsGame = elementsGame;
+        this.reloadText = "";
+        this.realoadComplete = false;
+        this.selectedEntity = null;
+        this.gameTime = 0;
+        this.timerText = null;
+        this.budget = 0;
+        this.fuelConsumption = 0;
+        this.budgetText = null;
+        this.timeConsumeCentral = 1000;
+        this.ckeckVictory = false;
     }
 
     preload() {
         this.load.image('tilesetImage', '../../assets/mapa.png');
         this.load.tilemapTiledJSON('map', '../../assets/mapa.json');
         this.load.image('droneSprite', '../../assets/drone.png');
+        this.load.image('BOFORS', '../../assets/bofors.png');
+        this.load.image('LASER', '../../assets/canonLaser.png');
+        this.load.image('CENTRAL', '../../assets/centralElectrica.png');
+        this.load.image('RADAR', '../../assets/radar.png');
+        this.load.image('MOBILE_RADAR', '../../assets/radarMovible.png');
+        this.load.image('MOBILE_CONNECTION', '../../assets/conexion.png');
+        this.load.image('LASER_CONNECTION', '../../assets/conexion.png');
+        this.load.image('MISSILE_BATTERY', '../../assets/bateriaMisiles.png');
+        this.load.image('droneSpriteSelect', '../../assets/droneSelect.png');
         this.load.image('balaSprite', '../../assets/bala.png');
         this.load.audio('fightSound', '../../assets/fightSound.mp3');
-        this.load.audio('shootDrone', '../../assets/shootDrone.mp3');
+        this.load.audio('shootSound', '../../assets/shootDrone.mp3');
+        this.load.audio('explosionSound', '../../assets/explosionSound.mp3');
+        this.load.audio('emptyGun', '../../assets/emptyGun.mp3');
+        this.load.audio('reloadBullet', '../../assets/reloadBullet.mp3');
+        this.load.audio('laserShoot', '../../assets/laserSoud.mp3');
+        this.load.audio('lost', '../../assets/lost.wav');
+        this.load.audio('win', '../../assets/win.wav');
+
+        for (let i = 4; i <= 7; i++) {
+            this.load.image(`explosion${i}`, `../../assets/explosion${i}.png`);
+        }
     }
 
     create() {
@@ -58,8 +90,66 @@ export class Game extends Phaser.Scene {
 
         this.setupWebSocketListeners();
 
+        this.anims.create({
+            key: 'explode',
+            frames: [
+                { key: 'explosion0' },
+                { key: 'explosion1' },
+                { key: 'explosion2' },
+                { key: 'explosion3' },
+                { key: 'explosion4' },
+                { key: 'explosion5' },
+                { key: 'explosion6' },
+                { key: 'explosion7' },
+                { key: 'explosion8' }
+            ],
+            frameRate: 10,
+            repeat: 0
+        });
+
+        let keyT = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T);
+
+        keyT.on('down', () => {
+            if (!this.scene.isPaused('SideViewScene')) {
+                this.scene.launch('SideViewScene');
+                this.scene.pause();
+            }
+        });
+
+        this.input.keyboard.on('keydown-ESC', () => {
+            if (this.startGame) {
+                Swal.fire({
+                    title: '¿Qué deseas hacer?',
+                    showDenyButton: true,
+                    showCancelButton: true,
+                    confirmButtonText: 'Guardar partida',
+                    denyButtonText: `Salir de partida`,
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        this.stompClient.send("/app/saveGame", {}, JSON.stringify({ gameId: this.code, nickName: this.name }));
+                        Swal.fire('Partida guardada', '', 'success');
+                    } else if (result.isDenied) {
+                        window.location.href = '/menu-game/index.html';
+                    }
+                });
+            }
+        });
+
+
 
     }
+
+    reloadBullets() {
+        if (this.selectedEntity) {
+            const shooterData = this.elementsGame[this.selectedEntity.id];
+            if (shooterData && shooterData.hasCharger) {
+                shooterData.countShoot = shooterData.maxCountShoot; // Asumiendo que este es el máximo de balas
+
+                //this.sound.play('reloadBullet');
+            }
+        }
+    }
+
 
     intializeMap() {
         const map = this.make.tilemap({ key: 'map' });
@@ -80,6 +170,7 @@ export class Game extends Phaser.Scene {
     }
 
     getInformationGame() {
+
         this.name = localStorage.getItem('userName');
         this.isOwner = localStorage.getItem('isOwner') === 'true';
         this.code = localStorage.getItem('gameCode');
@@ -100,6 +191,11 @@ export class Game extends Phaser.Scene {
     collidersHanlders() {
         this.physics.add.collider(this.player, this.bullets, this.handleBulletCollision, null, this);
         this.physics.add.collider(this.teamBlue, this.bullets, this.handleBulletCollision, null, this);
+        this.physics.add.collider(this.teamBlue, this.teamBlue, this.handleDefenseCollision, null, this);
+        // Evitar que las unidades pasen una sobre otra
+        this.physics.add.collider(this.player, this.player); // Drones con drones
+        this.physics.add.collider(this.teamBlue, this.teamBlue); // Defensas con defensas
+        this.physics.add.collider(this.player, this.teamBlue); // Drones con defensas
     }
 
     loadingHandler() {
@@ -152,6 +248,7 @@ export class Game extends Phaser.Scene {
     setupWebSocketListeners() {
         const socket = new SockJS('http://localhost:8080/gs-guide-websocket');
         this.stompClient = Stomp.over(socket);
+
         this.stompClient.debug = () => { };
 
         this.stompClient.connect({}, () => {
@@ -160,31 +257,54 @@ export class Game extends Phaser.Scene {
                 this.stompClient.send("/app/createGame", {}, JSON.stringify({ name: this.name }));
 
             } else {
-                this.stompClient.send("/app/register", {}, JSON.stringify({ gameId: this.code, nickName: this.name }));
+                let code = localStorage.getItem('gameCode');
+                this.stompClient.send("/app/register", {}, JSON.stringify({ gameId: code, nickName: this.name }));
             }
 
             this.stompClient.subscribe('/topic/createGame', (message) => {
                 const code = JSON.parse(message.body);
-                this.code = code.gameId;
-                this.stompClient.send("/app/register", {}, JSON.stringify({ gameId: this.code, nickName: this.name }));
+                let gameId = code.gameId;
+                this.stompClient.send("/app/register", {}, JSON.stringify({ gameId: gameId, nickName: this.name }));
                 this.playerRole = 'RED';
             });
 
+            //DISCONECT
+            window.addEventListener("beforeunload", (event) => {
+                this.stompClient.send("/app/disconnect", {}, JSON.stringify({ gameId: this.code, nickName: this.name }));
+                console.log('disconnect')
+            });
+
+            this.stompClient.subscribe('/topic/disconnect', (message) => {
+                this.fightTextShown = false;
+                this.startGame = false;
+                this.loadingHandler();
+            });
+
+
+
             this.stompClient.subscribe('/topic/playerRole', (message) => {
+
+                this.joinMethod = localStorage.getItem('isMethodJoin') === 'true';
+
+                if (this.joinMethod == null) {
+                    this.joinMethod = false
+                } else {
+                    localStorage.removeItem('isMethodJoin');
+                }
+
                 const playerInfo = JSON.parse(message.body);
-                console.log(playerInfo)
+
+                this.addTextCode(playerInfo.gameId);
+
+
                 this.setMilitaryEquipments(playerInfo);
+                this.prepareForFight(playerInfo);
 
                 this.processVisionInformation(playerInfo.parameters);
 
-                this.addTextCode();
-
                 this.playerRole = this.playerRole ? this.playerRole : playerInfo.side;
 
-                this.prepareForFigth(playerInfo);
-
-                this.initializePlayers(playerInfo.side);
-
+                this.initializePlayers(playerInfo.isFullUsers);
 
             });
 
@@ -213,7 +333,75 @@ export class Game extends Phaser.Scene {
     setMilitaryEquipments(data) {
         this.militaryEquipmentsBlue = data.militaryEquipments.filter(equipment => equipment.side === 'BLUE');
         this.militaryEquipmentsRed = data.militaryEquipments.filter(equipment => equipment.side === 'RED');
+
     }
+
+    initialBudget(playerInfo) {
+
+        const gameTimeParameter = playerInfo.parameters.find(param => param.type === "GAME_TIME");
+        if (gameTimeParameter) {
+            this.gameTime = parseInt(gameTimeParameter.value, 10);
+
+            this.timerBackground = this.add.rectangle(20, 30, 150, 50, 0x000000).setOrigin(0, 0);
+
+            this.timerText = this.add.text(10 + 5, 10 + 10, this.formatTime(this.gameTime), {
+                fontSize: '20px',
+                fill: '#ff0000',
+                fontFamily: 'Arial',
+                fontStyle: 'bold'
+            }).setOrigin(0, 0);
+        }
+
+        this.timerText.setX(this.timerBackground.x + (this.timerBackground.width / 2) - (this.timerText.width / 2));
+        this.timerText.setY(this.timerBackground.y + (this.timerBackground.height / 2) - (this.timerText.height / 2));
+
+
+        const budgetParameter = playerInfo.parameters.find(param => param.type === "BUDGET" && param.target === this.playerRole);
+        if (budgetParameter) {
+            this.budget = parseInt(budgetParameter.value, 10);
+        } else {
+            this.budget = 0;
+        }
+
+        if (this.playerRole === 'BLUE') {
+            const fuelConsumptionParameter = playerInfo.parameters.find(param => param.type === "FUEL_CONSUMPTION" && param.target === "CENTRAL");
+            this.fuelConsumption = fuelConsumptionParameter ? parseInt(fuelConsumptionParameter.value, 10) : 0;
+        } else {
+            this.fuelConsumption = 0;
+        }
+
+        this.initBudgetUpdater();
+    }
+
+    initBudgetUpdater() {
+        this.budgetText = this.add.text(20, 90, `Saldo: ${this.budget}`, {
+            fontSize: '20px',
+            fill: '#ff0000',
+            backgroundColor: '#000000',
+            padding: { x: 20, y: 10 },
+            fontStyle: 'bold'
+        }).setOrigin(0, 0);
+
+        if (this.playerRole === 'BLUE') {
+            this.time.addEvent({
+                delay: this.timeConsumeCentral,
+                callback: () => {
+                    this.budget -= this.fuelConsumption;
+                    this.budgetText.setText(`Saldo: ${this.budget}`);
+                },
+                callbackScope: this,
+                loop: true
+            });
+        }
+    }
+
+
+    formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const partInSeconds = seconds % 60;
+        return `${minutes}:${partInSeconds.toString().padStart(2, '0')}`;
+    }
+
 
     processVisionInformation(parameters) {
         parameters.forEach(param => {
@@ -223,24 +411,22 @@ export class Game extends Phaser.Scene {
         });
     }
 
-    addTextCode() {
-        this.add.text(890, 50, `CODIGO: ${this.code}`, {
+    addTextCode(code) {
+        this.add.text(890, 50, `CODIGO: ${code}`, {
             fontSize: '1.8em',
             color: '#000000',
             fontStyle: 'bold'
         });
+
+        this.code = code;
     }
 
-    prepareForFigth(playerInfo) {
-        if (playerInfo.side === 'BLUE' && !this.fightTextShown) {
+    prepareForFight(playerInfo) {
+        if (playerInfo.isFullUsers && !this.joinMethod && !this.fightTextShown) {
             this.darkenRectangle.setVisible(false);
             this.loadingText.setVisible(false);
             this.cameras.main.setAlpha(1);
             this.loadingBars.forEach(bar => bar.setVisible(false));
-
-            //Reproducir el sonido
-            //const fightSound = this.sound.add('fightSound');
-            //  fightSound.play();
 
             // Mostrar el conteo antes de "FIGHT!"
             const countdownText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY, '3', {
@@ -252,31 +438,28 @@ export class Game extends Phaser.Scene {
             // Crear una secuencia para el conteo
             this.time.delayedCall(1000, () => { countdownText.setText('2'); });
             this.time.delayedCall(2000, () => { countdownText.setText('1'); });
-            this.time.delayedCall(3000, () => { countdownText.setText('FIGHT!'); });
+            this.time.delayedCall(3000, () => {
+                countdownText.setText('FIGHT!');
+            });
             this.time.delayedCall(4000, () => {
-                //fightSound.stop();
-
-                // Hacer que el texto de "FIGHT!" se desvanezca después
-                this.tweens.add({
-                    targets: countdownText,
-                    alpha: 0,
-                    ease: 'Cubic.easeOut',
-                    duration: 1000,
-                    onComplete: () => {
-                        countdownText.destroy()
-                        this.startGame = true;
-                    }
-                });
+                countdownText.destroy();
+                this.startGame = true;
+                this.initialBudget(playerInfo); // Asegúrate de que esta llamada esté correctamente referenciada y que initBudgetUpdater esté definido para manejar el presupuesto correctamente.
+                if (this.playerRole === 'RED') {
+                    this.stompClient.send("/app/startGame", {}, JSON.stringify({ gameId: this.code, nickName: this.name }));
+                }
+                // La partida comienza oficialmente aquí, por lo que cualquier lógica adicional que deba ejecutarse al inicio del juego puede ser colocada aquí.
             });
 
             this.fightTextShown = true;
         }
     }
 
+
     initializePlayers(playerSide) {
         this.createRedTeam();
 
-        if (playerSide === 'BLUE' || this.startGame) {
+        if (playerSide && !this.joinMethod) {
             this.createBlueTeam();
         }
     }
@@ -288,25 +471,27 @@ export class Game extends Phaser.Scene {
         const mapHeight = this.game.config.height - 50;
         let droneId = 1;
 
-        for (let i = 0; i < 6; i++) {
-            let drone = this.physics.add.sprite(410 + i * 50, mapHeight - 80, 'droneSprite');
-            this.physics.add.existing(drone);
-            drone.setInteractive();
-            drone.isSelected = false;
-            drone.team = 'RED';
-            drone.id = `DRONE${droneId++}`;
-            drone.life = 3;
-            drone.visionRange = this.unitVisionRanges[drone.id] || 100;
-            drone.body.setImmovable(true);
-            drone.text = this.add.text(drone.x, drone.y - 20, `${drone.life}`, {
-                fontSize: '16px',
-                fill: '#000000',
-                fontFamily: 'Arial',
-                stroke: '#ffffff',
-                strokeThickness: 4
-            }).setOrigin(0.5);
-            this.player.add(drone);
-        }
+        this.militaryEquipmentsRed.forEach(entity => {
+            if (entity.life != 0) {
+                let drone = this.physics.add.sprite(entity.position.x, entity.position.y, 'droneSprite');
+                this.physics.add.existing(drone);
+                drone.setInteractive();
+                drone.isSelected = false;
+                drone.team = 'RED';
+                drone.id = `DRONE${droneId++}`;
+                drone.life = entity.life == null ? this.elementsGame[entity.id].life : entity.life;
+                drone.visionRange = this.unitVisionRanges[drone.id] || 100;
+                drone.body.setImmovable(true);
+                drone.text = this.add.text(drone.x, drone.y - 20, `${drone.life}`, {
+                    fontSize: '16px',
+                    fill: '#000000',
+                    fontFamily: 'Arial',
+                    stroke: '#ffffff',
+                    strokeThickness: 4
+                }).setOrigin(0.5);
+                this.player.add(drone);
+            }
+        });
 
 
         this.redTeamInitialized = true;
@@ -315,42 +500,146 @@ export class Game extends Phaser.Scene {
 
     createBlueTeam() {
 
+        if (this.blueTeamInitialized) {
+            return;
+        }
         let i = 0;
         this.militaryEquipmentsBlue.forEach(entity => {
-            i++;
-            let circle = this.add.circle(340 + i * 50, 80, 15, 0x0000ff);
-            this.physics.add.existing(circle);
-            circle.setInteractive();
-            circle.isSelected = false;
-            circle.body.setImmovable(true);
-            circle.body.mass = 1;
-            circle.team = 'BLUE';
-            circle.id = `${entity.id}`;
-            circle.life = 3;
-            circle.visionRange = this.unitVisionRanges[circle.id] || 100;
-            circle.text = this.add.text(circle.x, circle.y - 20, `${circle.life}`, {
-                fontSize: '16px',
-                fill: '#000000',
-                fontFamily: 'Arial',
-                stroke: '#ffffff',
-                strokeThickness: 4
-            }).setOrigin(0.5);
-            this.teamBlue.add(circle);
+            console.log(entity)
+            if (entity.life != 0) {
+
+                let circle = this.physics.add.sprite(entity.position.x, entity.position.y, entity.id);
+
+                this.physics.add.existing(circle);
+                circle.setInteractive();
+                circle.isSelected = false;
+                circle.body.setImmovable(true);
+                circle.body.mass = 1;
+                circle.team = 'BLUE';
+                circle.id = `${entity.id}`;
+                circle.life = entity.life == null ? this.elementsGame[entity.id].life : entity.life;
+                circle.visionRange = this.unitVisionRanges[circle.id] || 100;
+                circle.text = this.add.text(circle.x, circle.y - 20, `${circle.life}`, {
+                    fontSize: '16px',
+                    fill: '#000000',
+                    fontFamily: 'Arial',
+                    stroke: '#ffffff',
+                    strokeThickness: 4
+                }).setOrigin(0.5);
+                this.teamBlue.add(circle);
+            }
         });
+
+        this.blueTeamInitialized = true;
     }
 
     updateLifeMlitaryEquipment(hitInfo) {
         let affectedUnit = this.findAffectedUnit(hitInfo.militaryEquipmentId);
+        console.log(affectedUnit);
         if (affectedUnit) {
             affectedUnit.life = hitInfo.life;
             if (affectedUnit.life <= 0) {
+                this.showExplosion(affectedUnit.x, affectedUnit.y);
+                //this.sound.play('explosionSound');
                 affectedUnit.text?.destroy();
                 affectedUnit.destroy();
+                if (affectedUnit.id == "CENTRAL" || affectedUnit.id == "LASER_CONNECTION") {
+                    this.elementsGame['LASER'].countShoot = 0;
+                }
+
+                this.checkForEndGame();
+
             } else {
                 affectedUnit.text.setText(`${affectedUnit.life}`);
             }
         }
     }
+
+    checkForEndGame() {
+        // Primero revisa si el tiempo se ha acabado.
+        if (this.gameTime <= 0) {
+            this.checkForWinCondition();
+        } else {
+            // Si el tiempo aún no se ha acabado, revisa el estado de las unidades.
+            let blueTeamAlive = this.teamBlue.getChildren().filter(unit => unit.active).length > 0;
+            let redTeamAlive = this.player.getChildren().filter(unit => unit.active).length > 0;
+
+            if (!blueTeamAlive || !redTeamAlive) {
+                this.checkForWinCondition();
+            }
+        }
+    }
+
+
+    checkForWinCondition() {
+        if (!this.ckeckVictory) {
+            const blueTeamAlive = this.teamBlue.getChildren().filter(member => member.active).length;
+            const redTeamAlive = this.player.getChildren().filter(drone => drone.active).length;
+
+            const totalBlueTeam = this.militaryEquipmentsBlue.length;
+            const totalRedTeam = this.militaryEquipmentsRed.length;
+
+            console.log(blueTeamAlive, redTeamAlive, totalBlueTeam, totalRedTeam)
+
+
+            // Calcula el porcentaje de unidades vivas
+            const blueTeamAlivePercentage = (blueTeamAlive / totalBlueTeam) * 100;
+            const redTeamAlivePercentage = (redTeamAlive / totalRedTeam) * 100;
+
+            let title, text;
+
+            // Manejar caso de empate o fin de tiempo
+            if ((blueTeamAlive === 0 && redTeamAlive === 0) || this.gameTime === 0) {
+                // Si ambos equipos destruyen sus últimas unidades al mismo tiempo o el tiempo se agota
+                if (blueTeamAlivePercentage > redTeamAlivePercentage) {
+                    title = this.playerRole === 'BLUE' ? '¡Victoria!' : 'Has perdido...';
+                    text = this.playerRole === 'BLUE' ? '¡Felicidades, has ganado la partida!' : 'No te desanimes, ¡inténtalo de nuevo!';
+                } else if (redTeamAlivePercentage > blueTeamAlivePercentage) {
+                    title = this.playerRole === 'RED' ? '¡Victoria!' : 'Has perdido...';
+                    text = this.playerRole === 'RED' ? '¡Felicidades, has ganado la partida!' : 'No te desanimes, ¡inténtalo de nuevo!';
+                } else {
+                    title = 'Empate';
+                    text = 'Ambos equipos tienen el mismo porcentaje de supervivencia. ¡Intenten de nuevo!';
+                }
+            } else {
+                // Lógica existente para victorias/derrotas no basadas en tiempo
+                if (this.playerRole === 'BLUE' && !blueTeamAlive) {
+                    title = 'Has perdido...';
+                    text = 'No te desanimes';
+                } else if (this.playerRole === 'BLUE' && !redTeamAlive) {
+                    title = '¡Victoria!';
+                    text = '¡Felicidades, has ganado la partida!';
+                } else if (this.playerRole === 'RED' && !redTeamAlive) {
+                    title = 'Has perdido...';
+                    text = 'No te desanimes, ¡inténtalo de nuevo!';
+                } else if (this.playerRole === 'RED' && !blueTeamAlive) {
+                    title = '¡Victoria!';
+                    text = '¡Felicidades, has ganado la partida!';
+                }
+            }
+
+            console.log(title)
+
+            // Mostrar resultado
+            if (title) {
+                Swal.fire({
+                    title: title,
+                    text: text,
+                    icon: title === 'Empate' ? 'info' : (title.includes('Victoria') ? 'success' : 'error'),
+                    width: 600,
+                    padding: "3em",
+                    confirmButtonText: "Continuar",
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = '/menu-game/index.html';
+                    }
+                });
+            }
+            this.ckeckVictory = true;
+        }
+    }
+
+
 
 
     findAffectedUnit(militaryEquipmentId) {
@@ -367,21 +656,31 @@ export class Game extends Phaser.Scene {
     }
 
     handleBulletCollision(player, bullet) {
-        if (player.team !== bullet.getData('team')) {
-            const collisionData = {
-                gameId: this.code,
-                militaryEquipmentId: player.id,
-                bulletId: bullet.data.get('id'),
-                life: Math.max(0, player.life - 1)
-            };
+        // if (player.team !== bullet.getData('team')) {
+        const collisionData = {
+            gameId: this.code,
+            militaryEquipmentId: player.id,
+            bulletId: bullet.data.get('id'),
+            life: Math.max(0, player.life - 1)
+        };
 
-            if (bullet.data.get('shooterId') === this.playerId) {
-                this.stompClient.send("/app/collision", {}, JSON.stringify(collisionData));
-            }
 
-            bullet.destroy();
+        if (bullet.data.get('team') === this.playerRole) {
+            this.stompClient.send("/app/collision", {}, JSON.stringify(collisionData));
         }
+
+        bullet.destroy();
+        // }
     }
+
+
+    showExplosion(x, y) {
+        let explosionSprite = this.add.sprite(x, y, 'explosion0').play('explode');
+        explosionSprite.on('animationcomplete', () => {
+            explosionSprite.destroy(); // Destruye el sprite una vez que la animación haya terminado
+        });
+    }
+
 
     hitTest(x, y) {
         let hitEntity = null;
@@ -445,7 +744,7 @@ export class Game extends Phaser.Scene {
                     // Si no se selecciona un aliado y el jugador es del equipo azul, intenta seleccionar un enemigo rojo.
                     let hitEnemy = this.hitTest(pointer.x, pointer.y);
                     if (this.selectedCircle && this.selectedEntity.life > 0 && hitEnemy && hitEnemy.team !== this.playerRole) {
-                        if (!this.notSelect.includes(this.selectedCircle.id)) {
+                        if (!this.elementsGame[this.selectedCircle?.id]?.isSelected) {
                             this.shootBullets(this.selectedCircle, hitEnemy);
                         }
                     }
@@ -456,12 +755,12 @@ export class Game extends Phaser.Scene {
 
 
     moveSelectedCircle(selectedCircle, pointer) {
-        if (this.isShooting || this.notSelect.includes(selectedCircle.id)) {
+        if (this.isShooting || this.elementsGame[selectedCircle?.id].isSelected) {
             this.isShooting = false;
             return;
         }
 
-        if (selectedCircle && selectedCircle.team === 'BLUE' && selectedCircle.life > 0) {
+        if (selectedCircle && selectedCircle.team === 'BLUE' && selectedCircle.life > 0 && this.elementsGame[selectedCircle.id]?.move) {
             const angle = Phaser.Math.Angle.Between(selectedCircle.x, selectedCircle.y, pointer.x, pointer.y);
             const distance = Phaser.Math.Distance.Between(selectedCircle.x, selectedCircle.y, pointer.x, pointer.y);
             const speed = 200;
@@ -477,14 +776,21 @@ export class Game extends Phaser.Scene {
     }
 
     toggleDroneSelection(selectedDrone) {
-        this.player.getChildren().forEach(drone => {
-            drone.isSelected = false;
-            drone.isFirstSelect = false;
-        });
+        if (this.playerRole == "RED") {
+            this.player.getChildren().forEach(drone => {
+                drone.isSelected = false;
+                drone.isFirstSelect = false;
+                drone.setTexture('droneSprite');
+            });
 
-        selectedDrone.isSelected = true;
-        selectedDrone.isFirstSelect = true;
+            selectedDrone.isSelected = true;
+            selectedDrone.isFirstSelect = true;
+            selectedDrone.setTexture('droneSpriteSelect');
+        }
+
+
         this.selectedEntity = selectedDrone;
+
     }
 
 
@@ -546,17 +852,28 @@ export class Game extends Phaser.Scene {
     updateOtherPlayerPosition(playerUpdate) {
         if (playerUpdate) {
             if (this.name !== playerUpdate.nickName && playerUpdate.gameId === this.code) {
-                const group = this.militaryEquipmentsRed.some(equipment => equipment.id === playerUpdate.militaryEquipmentId) ? this.player : this.teamBlue;
+                // Determinar si el equipamiento pertenece al equipo rojo o azul
+                const isRedTeam = this.militaryEquipmentsRed.some(equipment => equipment.id === playerUpdate.militaryEquipmentId);
+                const group = isRedTeam ? this.player : this.teamBlue;
                 let entity = group.getChildren().find(e => e.id === playerUpdate.militaryEquipmentId);
 
                 if (!entity) {
                     return;
                 }
 
+                // Actualiza la posición en la entidad visual/gráfica
                 this.startInterpolation(entity, playerUpdate.position.x, playerUpdate.position.y);
+
+                // También actualiza la posición en la estructura de datos correspondiente
+                const equipments = isRedTeam ? this.militaryEquipmentsRed : this.militaryEquipmentsBlue;
+                const equipmentToUpdate = equipments.find(equipment => equipment.id === playerUpdate.militaryEquipmentId);
+                if (equipmentToUpdate) {
+                    equipmentToUpdate.position = playerUpdate.position; // Asegúrate de que esta asignación refleje cómo almacenas la posición
+                }
             }
         }
     }
+
 
     startInterpolation(entity, targetX, targetY) {
         const distance = Phaser.Math.Distance.Between(entity.x, entity.y, targetX, targetY);
@@ -601,10 +918,82 @@ export class Game extends Phaser.Scene {
             }
         });
 
+        this.teamBlue.getChildren().forEach((member) => {
+            if (member.id === 'MOBILE_RADAR') {
+                // Aquí aplicas la lógica de volteo basada en la velocidad en el eje X
+                if (member.body.velocity.x > 0) {
+                    member.scaleX = -1; // Hacia la derecha
+                } else if (member.body.velocity.x < 0) {
+                    member.scaleX = 1; // Hacia la izquierda
+                }
+            } else {
+                if (member.id === 'BOFORS') {
+                    if (member.prevX === undefined || member.prevY === undefined) {
+                        member.prevX = member.x;
+                        member.prevY = member.y;
+                    }
+
+                    // Determinar la dirección del movimiento
+                    let deltaX = member.x - member.prevX;
+                    let deltaY = member.y - member.prevY;
+
+                    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                        // Movimiento principal en X
+                        if (deltaX > 0) {
+                            // Movimiento a la derecha
+                            member.angle = -90;
+                        } else {
+                            // Movimiento a la izquierda
+                            member.angle = 90;
+                        }
+                    } else if (Math.abs(deltaY) > Math.abs(deltaX)) {
+                        // Movimiento principal en Y
+                        if (deltaY > 0) {
+                            // Movimiento hacia abajo
+                            member.angle = 0;
+                        } else {
+                            // Movimiento hacia arriba
+                            member.angle = 180;
+                        }
+                    }
+
+                    // Actualiza las posiciones previas para el próximo frame
+                    member.prevX = member.x;
+                    member.prevY = member.y;
+                }
+            }
+        });
+
+        if (this.startGame && this.gameTime > 0) {
+            // Convierte `delta` a segundos y resta del tiempo restante
+            this.gameTime -= delta / 1000;
+
+            // Actualiza el texto del contador
+            this.timerText.setText(this.formatTime(Math.round(this.gameTime)));
+
+            // Cuando el contador llegue a 0, puedes hacer algo especial aquí
+            if (this.gameTime <= 0) {
+                this.handleTimerEnd();
+            }
+        }
+
         this.updateBullets();
 
         this.updateVisibility();
         this.updateBulletsVisibility();
+
+        if (this.gameTime <= 0 && this.startGame) { // Asegúrate de que la partida haya empezado
+            this.checkForWinCondition();
+            this.gameTime = 0;
+        }
+
+    }
+
+    handleTimerEnd() {
+        // Aquí manejas el evento de cuando el tiempo se agote
+        console.log("El tiempo se ha agotado!");
+        this.gameTime = 0;
+        // Por ejemplo, podrías finalizar el juego o cambiar a una escena diferente
     }
 
 
@@ -775,53 +1164,156 @@ export class Game extends Phaser.Scene {
     }
 
     shootBullets(shooter, target) {
+        const shooterData = this.elementsGame[shooter.id];
         this.isShooting = true;
-        let maxDistance = 300;
-        let bulletId = this.generateUUID();
-        let bullet = this.bullets.create(shooter.x, shooter.y, 'balaSprite');
-        bullet.setData('id', bulletId);
-        bullet.setData('originX', shooter.x);
-        bullet.setData('originY', shooter.y);
-        bullet.setData('team', this.playerRole);
-        bullet.setData('shooterId', this.playerId);
-        bullet.setData({ id: bulletId, originX: shooter.x, originY: shooter.y, maxDistance, team: this.playerRole, shooterId: this.playerId });
+        if (shooterData.countShoot > 0) {
+            shooterData.countShoot -= 1;
+            let maxDistance = 300;
+            let bulletId = this.generateUUID();
+            let bullet = this.bullets.create(shooter.x, shooter.y, 'balaSprite');
+            bullet.setData('id', bulletId);
+            bullet.setData('originX', shooter.x);
+            bullet.setData('originY', shooter.y);
+            bullet.setData('team', this.playerRole);
+            //bullet.setData('shooterId', this.playerId);
+            bullet.setData({ id: bulletId, originX: shooter.x, originY: shooter.y, maxDistance, team: this.playerRole });
 
-        this.physics.moveTo(bullet, target.x, target.y, 500);
+            this.physics.moveTo(bullet, target.x, target.y, 500);
 
-        const shootInfo = {
-            gameId: this.code,
-            nickName: this.name,
-            origin: { x: shooter.x, y: shooter.y },
-            target: { x: target.x, y: target.y },
-            bulletId: bulletId,
-            maxDistance: maxDistance,
-            shooterId: this.playerId,
-        };
+            const shootInfo = {
+                gameId: this.code,
+                nickName: this.name,
+                //origin: { x: shooter.x, y: shooter.y },
+                equipmentMilitaryId: shooter.id,
+                target: { x: target.x, y: target.y },
+                bulletCount: shooterData.countShoot,
+                bulletId: bulletId,
+                maxDistance: maxDistance,
+                //shooterId: this.playerId,
+            };
 
-        this.sound.play('shootDrone');
-        this.stompClient.send("/app/shoot", {}, JSON.stringify(shootInfo));
-        bullet.body.onWorldBounds = true;
+            if (shooter.id == 'LASER') {
+                // this.sound.play('laserShoot');
+            } else {
+                //this.sound.play('shootSound');
+            }
+
+            this.stompClient.send("/app/shoot", {}, JSON.stringify(shootInfo));
+            bullet.body.onWorldBounds = true;
+        } else {
+            if ((!this.reloadText || !this.reloadComplete) && shooterData.hasCharger) {
+                // this.sound.play('emptyGun');
+                // let startPositionX, endPositionX, targetPositionY, textColor;
+
+                // // Ajustes para el jugador del equipo rojo
+                // if (this.playerRole === 'RED') {
+                //     startPositionX = -200; // Fuera de la pantalla a la izquierda
+                //     endPositionX = this.cameras.main.centerX - 450; // Mover hacia el centro (ajustar según sea necesario)
+                //     targetPositionY = this.cameras.main.centerY + 400; // createPosición más baja en la pantalla
+                //     textColor = '#ff0000'; // Texto rojo
+                // } else if (this.playerRole === 'BLUE') {
+                //     // Ajustes para el jugador del equipo azul
+                //     startPositionX = this.cameras.main.width - 100; // Fuera de la pantalla a la derecha
+                //     endPositionX = this.cameras.main.width - 250; // Mover hacia una posición más a la derecha en la pantalla
+                //     targetPositionY = 50; // Posición más alta en la pantalla
+                //     textColor = '#0000ff'; // Texto azul
+                // }
+
+                // this.reloadText = this.add.text(startPositionX, targetPositionY, '¡RECARGA CON LA R!', {
+                //     fontSize: '20px',
+                //     fill: textColor,
+                //     backgroundColor: '#000',
+                //     padding: { x: 20, y: 10 },
+                //     fontStyle: 'bold',
+                //     stroke: '#ffffff', // Define el color del borde como blanco
+                //     strokeThickness: 4
+                // }).setDepth(200);
+
+                // this.reloadComplete = true; // Asegúrate de que el control del tween esté activo
+
+                // // Tween para mover el texto desde fuera de la pantalla hacia su posición final
+                // this.tweens.add({
+                //     targets: this.reloadText,
+                //     x: endPositionX,
+                //     duration: 1000,
+                //     ease: 'Power2',
+                //     onStart: () => {
+                //         this.reloadText.setAlpha(1);
+                //     },
+                //     onComplete: () => {
+                //         // Inicia el parpadeo una vez que el texto está en su posición final
+                //         this.tweens.add({
+                //             targets: this.reloadText,
+                //             alpha: 0.2,
+                //             yoyo: true,
+                //             repeat: 3,
+                //             duration: 500,
+                //             onComplete: () => {
+                //                 // Desvanecimiento después del parpadeo
+                //                 this.tweens.add({
+                //                     targets: this.reloadText,
+                //                     alpha: 0,
+                //                     duration: 1000,
+                //                     onComplete: () => {
+                //                         this.reloadComplete = false;
+                //                     }
+                //                 });
+                //             }
+                //         });
+                //     }
+                // });
+            }
+
+        }
     }
 
 
 
     shootUpdateOther(shootInfo) {
-        let bullet = this.bullets.create(shootInfo.origin.x, shootInfo.origin.y, 'balaSprite');
+        // Encuentra el equipamiento militar por ID para obtener su posición
+        const equipment = this.militaryEquipmentsRed.concat(this.militaryEquipmentsBlue).find(e => e.id === shootInfo.equipmentMilitaryId);
+
+        if (!equipment || !equipment.position) {
+            console.error("Equipamiento militar no encontrado o sin posición.");
+            return;
+        }
+
+        let bullet = this.bullets.create(equipment.position.x, equipment.position.y, 'balaSprite');
         bullet.setData({
             id: shootInfo.bulletId,
-            originX: shootInfo.origin.x,
-            originY: shootInfo.origin.y,
+            originX: equipment.position.x,
+            originY: equipment.position.y,
             maxDistance: shootInfo.maxDistance,
             team: shootInfo.nickName === this.name ? this.playerRole : this.playerRole === 'RED' ? 'BLUE' : 'RED',
-            shooterId: shootInfo.shooterId
-        });
-
-        // Asegúrate de imprimir la información dentro del forEach
-        this.bullets.getChildren().forEach(bullet => {
-            console.log(bullet);
-            console.log(`Bullet ID: ${bullet.getData('id')}, Origin: (${bullet.getData('originX')}, ${bullet.getData('originY')}), MaxDistance: ${bullet.getData('maxDistance')}`);
+            shooterId: shootInfo.equipmentMilitaryId
         });
 
         this.physics.moveTo(bullet, shootInfo.target.x, shootInfo.target.y, 500);
+    }
+
+
+
+}
+
+
+
+export class VistaLateral extends Phaser.Scene {
+    constructor() {
+        super({ key: 'VistaLateral' });
+    }
+
+    preload() {
+        // Cargar recursos si es necesario
+    }
+
+    create() {
+        // Dentro de create() en VistaLateral
+        // this.input.keyboard.on('keyup-T', () => {
+        //     this.scene.stop();
+        //     this.scene.resume('Game');
+        // });
+
+        // // Crear elementos de la escena, como textos, imágenes, etc.
+        // this.add.text(100, 100, 'Vista Lateral', { fontSize: '32px', fill: '#fff' });
     }
 }

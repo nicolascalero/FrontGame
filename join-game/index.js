@@ -5,6 +5,7 @@ function joinGame() {
     } else {
         localStorage.setItem('isOwner', false);
         localStorage.setItem('gameCode', code);
+        localStorage.setItem('isMethodJoin', false);
         window.location.href = '/game/game.html';
     }
 }
