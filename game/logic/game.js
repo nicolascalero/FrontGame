@@ -163,7 +163,7 @@ export class Game extends Phaser.Scene {
             if (shooterData && shooterData.hasCharger) {
                 shooterData.countShoot = shooterData.maxCountShoot; // Asumiendo que este es el máximo de balas
 
-                //this.sound.play('reloadBullet');
+                this.sound.play('reloadBullet');
             }
         }
     }
@@ -427,7 +427,7 @@ export class Game extends Phaser.Scene {
     }
 
     addTextCode(code) {
-        this.add.text(890, 50, `CODIGO: ${code}`, {
+        this.add.text(1100, 80, `CODIGO: ${code}`, {
             fontSize: '1.8em',
             color: '#000000',
             fontStyle: 'bold'
@@ -487,6 +487,7 @@ export class Game extends Phaser.Scene {
         let droneId = 1;
 
         this.militaryEquipmentsRed.forEach(entity => {
+            console.log(entity)
             if (entity.life != 0) {
                 let drone = this.physics.add.sprite(entity.position.x, entity.position.y, 'droneSprite');
                 this.physics.add.existing(drone);
@@ -555,7 +556,7 @@ export class Game extends Phaser.Scene {
             affectedUnit.life = hitInfo.life;
             if (affectedUnit.life <= 0) {
                 this.showExplosion(affectedUnit.x, affectedUnit.y);
-                //this.sound.play('explosionSound');
+                this.sound.play('explosionSound');
                 affectedUnit.text?.destroy();
                 affectedUnit.destroy();
                 if (affectedUnit.id == "CENTRAL" || affectedUnit.id == "LASER_CONNECTION") {
@@ -621,15 +622,19 @@ export class Game extends Phaser.Scene {
                 if (this.playerRole === 'BLUE' && !blueTeamAlive) {
                     title = 'Has perdido...';
                     text = 'No te desanimes';
+                    this.sound.play("lost");
                 } else if (this.playerRole === 'BLUE' && !redTeamAlive) {
                     title = '¡Victoria!';
                     text = '¡Felicidades, has ganado la partida!';
+                    this.sound.play("win");
                 } else if (this.playerRole === 'RED' && !redTeamAlive) {
                     title = 'Has perdido...';
                     text = 'No te desanimes, ¡inténtalo de nuevo!';
+                    this.sound.play("lost");
                 } else if (this.playerRole === 'RED' && !blueTeamAlive) {
                     title = '¡Victoria!';
                     text = '¡Felicidades, has ganado la partida!';
+                    this.sound.play("win");
                 }
             }
 
@@ -1208,9 +1213,9 @@ export class Game extends Phaser.Scene {
             this.eventsCenter.emit('changeTitle', { mensaje: 'GameShoot' });
 
             if (shooter.id == 'LASER') {
-                // this.sound.play('laserShoot');
+                this.sound.play('laserShoot');
             } else {
-                //this.sound.play('shootSound');
+                this.sound.play('shootSound');
             }
 
             this.stompClient.send("/app/shoot", {}, JSON.stringify(shootInfo));

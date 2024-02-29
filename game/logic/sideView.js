@@ -35,9 +35,6 @@ export class SideView extends Phaser.Scene {
     }
 
     updateContent(data) {
-        // Actualiza el texto existente en lugar de añadir uno nuevo
-        if (this.titleText) {
-            this.titleText.setText(data);
-        }
+        alert(data.mensaje)
     }
 }
