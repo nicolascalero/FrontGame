@@ -4,7 +4,7 @@ import { SideView } from './logic/sideView.js';
 
 const gameConfig = {
     type: Phaser.AUTO,
-    width: 1040,
+    width: 1248,
     height: 1040,
     parent: 'game-container',
     physics: {
