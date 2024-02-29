@@ -1,12 +1,12 @@
-import { Game, VistaLateral } from './logic/game.js';
+import { Game } from './logic/game.js';
+import { SideView } from './logic/sideView.js';
 
 
-
-const config = {
+const gameConfig = {
     type: Phaser.AUTO,
     width: 1040,
     height: 1040,
-    backgroundColor: "#ddd",
+    parent: 'game-container',
     physics: {
         default: 'arcade',
         arcade: {
@@ -14,18 +14,26 @@ const config = {
             debug: false,
             fps: 60
         },
-        fps: { // not sure if this is even doing anything
+        fps: {
             max: 60,
             min: 20,
             target: 60,
         }
     },
-    scene: [Game, VistaLateral],
-    scale: {
-        mode: Phaser.Scale.Center,
-        autoCenter: Phaser.Scale.Center
-    }
+    scene: [Game]
 };
 
-const game = new Phaser.Game(config);
+
+const sideViewConfig = {
+    type: Phaser.AUTO,
+    parent: 'side-view-container',
+    width: 448, // Ajusta según tus necesidades
+    height: 352,
+    scene: [SideView],
+
+};
+
+// Crear las instancias de juego
+const game = new Phaser.Game(gameConfig);
+const sideView = new Phaser.Game(sideViewConfig);
 

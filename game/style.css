@@ -4,3 +4,78 @@ canvas {
     max-height: 100vh;
     margin: auto;
 }
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgb(12, 17, 27);
+    font-family: Arial, sans-serif;
+    overflow: hidden;
+}
+
+#game-container,
+#side-view-container {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 10px;
+}
+
+#game-container {
+    /* Considera ajustar esta altura para pantallas muy pequeñas */
+    background-color: #fff;
+    border: rgb(161, 45, 45) 5px solid;
+    margin-top: 0 !important;
+    margin-left: 0 !important;
+    box-sizing: border-box;
+
+}
+
+
+#side-view-container {
+    flex: none;
+    width: 450px;
+    /* Esta anchura se ajustará en pantallas más pequeñas */
+    height: 350px;
+    background-color: #f8f8f8;
+    border: rgb(161, 45, 45) 5px solid;
+}
+
+.titleSideView {
+    text-align: center;
+    font-size: 2rem;
+    color: rgb(255, 255, 255);
+    margin-bottom: 1rem;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+
+@media (max-width: 768px) {
+    body {
+        flex-direction: column;
+    }
+
+    #game-container,
+    #side-view-container {
+        width: 80%;
+        /* Hace que ambos contenedores tomen el 80% del ancho disponible */
+        max-width: none;
+        /* Elimina el límite de max-width para permitir la flexibilidad */
+    }
+
+    #game-container {
+        height: auto;
+        /* Ajusta la altura automáticamente basado en el contenido */
+    }
+
+    #side-view-container {
+        /* Ajusta la altura para mantener una proporción adecuada */
+        height: calc(80vw * (350 / 450));
+        /* Mantiene la relación de aspecto original de 450:350 */
+    }
+}

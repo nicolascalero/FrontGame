@@ -1,5 +1,6 @@
 
 import elementsGame from "../models/elementsGame.js";
+import eventsCenter from "./eventsCenter.js";
 
 
 export class Game extends Phaser.Scene {
@@ -44,6 +45,8 @@ export class Game extends Phaser.Scene {
         this.budgetText = null;
         this.timeConsumeCentral = 1000;
         this.ckeckVictory = false;
+        this.eventsCenter = eventsCenter;
+        this.isFullUsers = false;
     }
 
     preload() {
@@ -135,8 +138,23 @@ export class Game extends Phaser.Scene {
             }
         });
 
+        this.game.events.on('hidden', this.onGameHidden, this);
+        this.game.events.on('visible', this.onGameVisible, this);
 
+    }
 
+    onGameHidden() {
+        // Lógica a ejecutar cuando el juego pierde el foco
+        console.log('Juego pausado o minimizado');
+        // Por ejemplo, pausar el juego
+        this.scene.pause();
+    }
+
+    onGameVisible() {
+        // Lógica a ejecutar cuando el juego recupera el foco
+        console.log('Juego reanudado o maximizado');
+        // Por ejemplo, reanudar el juego
+        this.scene.resume();
     }
 
     reloadBullets() {
@@ -284,25 +302,20 @@ export class Game extends Phaser.Scene {
 
             this.stompClient.subscribe('/topic/playerRole', (message) => {
 
-                this.joinMethod = localStorage.getItem('isMethodJoin') === 'true';
-
-                if (this.joinMethod == null) {
-                    this.joinMethod = false
-                } else {
-                    localStorage.removeItem('isMethodJoin');
-                }
-
                 const playerInfo = JSON.parse(message.body);
+                console.log(playerInfo)
 
                 this.addTextCode(playerInfo.gameId);
 
 
                 this.setMilitaryEquipments(playerInfo);
-                this.prepareForFight(playerInfo);
 
                 this.processVisionInformation(playerInfo.parameters);
 
                 this.playerRole = this.playerRole ? this.playerRole : playerInfo.side;
+
+                this.prepareForFight(playerInfo);
+
 
                 this.initializePlayers(playerInfo.isFullUsers);
 
@@ -329,6 +342,8 @@ export class Game extends Phaser.Scene {
             });
         });
     }
+
+
 
     setMilitaryEquipments(data) {
         this.militaryEquipmentsBlue = data.militaryEquipments.filter(equipment => equipment.side === 'BLUE');
@@ -422,7 +437,7 @@ export class Game extends Phaser.Scene {
     }
 
     prepareForFight(playerInfo) {
-        if (playerInfo.isFullUsers && !this.joinMethod && !this.fightTextShown) {
+        if (playerInfo.isFullUsers && !this.fightTextShown) {
             this.darkenRectangle.setVisible(false);
             this.loadingText.setVisible(false);
             this.cameras.main.setAlpha(1);
@@ -459,7 +474,7 @@ export class Game extends Phaser.Scene {
     initializePlayers(playerSide) {
         this.createRedTeam();
 
-        if (playerSide && !this.joinMethod) {
+        if (playerSide) {
             this.createBlueTeam();
         }
     }
@@ -909,8 +924,6 @@ export class Game extends Phaser.Scene {
                 bullet.y
             );
 
-            // console.log(distanceFromOrigin)
-            // console.log(bullet.data.get('maxDistance'))
 
             // Verifica si la bala ha recorrido su distancia máxima
             if (distanceFromOrigin > bullet.data.get('maxDistance')) {
@@ -1164,6 +1177,7 @@ export class Game extends Phaser.Scene {
     }
 
     shootBullets(shooter, target) {
+
         const shooterData = this.elementsGame[shooter.id];
         this.isShooting = true;
         if (shooterData.countShoot > 0) {
@@ -1184,13 +1198,14 @@ export class Game extends Phaser.Scene {
                 gameId: this.code,
                 nickName: this.name,
                 //origin: { x: shooter.x, y: shooter.y },
-                equipmentMilitaryId: shooter.id,
+                originEquipmentMilitaryId: shooter.id,
                 target: { x: target.x, y: target.y },
                 bulletCount: shooterData.countShoot,
                 bulletId: bulletId,
                 maxDistance: maxDistance,
                 //shooterId: this.playerId,
             };
+            this.eventsCenter.emit('changeTitle', { mensaje: 'GameShoot' });
 
             if (shooter.id == 'LASER') {
                 // this.sound.play('laserShoot');
@@ -1202,66 +1217,66 @@ export class Game extends Phaser.Scene {
             bullet.body.onWorldBounds = true;
         } else {
             if ((!this.reloadText || !this.reloadComplete) && shooterData.hasCharger) {
-                // this.sound.play('emptyGun');
-                // let startPositionX, endPositionX, targetPositionY, textColor;
+                this.sound.play('emptyGun');
+                let startPositionX, endPositionX, targetPositionY, textColor;
 
-                // // Ajustes para el jugador del equipo rojo
-                // if (this.playerRole === 'RED') {
-                //     startPositionX = -200; // Fuera de la pantalla a la izquierda
-                //     endPositionX = this.cameras.main.centerX - 450; // Mover hacia el centro (ajustar según sea necesario)
-                //     targetPositionY = this.cameras.main.centerY + 400; // createPosición más baja en la pantalla
-                //     textColor = '#ff0000'; // Texto rojo
-                // } else if (this.playerRole === 'BLUE') {
-                //     // Ajustes para el jugador del equipo azul
-                //     startPositionX = this.cameras.main.width - 100; // Fuera de la pantalla a la derecha
-                //     endPositionX = this.cameras.main.width - 250; // Mover hacia una posición más a la derecha en la pantalla
-                //     targetPositionY = 50; // Posición más alta en la pantalla
-                //     textColor = '#0000ff'; // Texto azul
-                // }
+                // Ajustes para el jugador del equipo rojo
+                if (this.playerRole === 'RED') {
+                    startPositionX = -200; // Fuera de la pantalla a la izquierda
+                    endPositionX = this.cameras.main.centerX - 450; // Mover hacia el centro (ajustar según sea necesario)
+                    targetPositionY = this.cameras.main.centerY + 400; // createPosición más baja en la pantalla
+                    textColor = '#ff0000'; // Texto rojo
+                } else if (this.playerRole === 'BLUE') {
+                    // Ajustes para el jugador del equipo azul
+                    startPositionX = this.cameras.main.width - 100; // Fuera de la pantalla a la derecha
+                    endPositionX = this.cameras.main.width - 250; // Mover hacia una posición más a la derecha en la pantalla
+                    targetPositionY = 50; // Posición más alta en la pantalla
+                    textColor = '#0000ff'; // Texto azul
+                }
 
-                // this.reloadText = this.add.text(startPositionX, targetPositionY, '¡RECARGA CON LA R!', {
-                //     fontSize: '20px',
-                //     fill: textColor,
-                //     backgroundColor: '#000',
-                //     padding: { x: 20, y: 10 },
-                //     fontStyle: 'bold',
-                //     stroke: '#ffffff', // Define el color del borde como blanco
-                //     strokeThickness: 4
-                // }).setDepth(200);
+                this.reloadText = this.add.text(startPositionX, targetPositionY, '¡RECARGA CON LA R!', {
+                    fontSize: '20px',
+                    fill: textColor,
+                    backgroundColor: '#000',
+                    padding: { x: 20, y: 10 },
+                    fontStyle: 'bold',
+                    stroke: '#ffffff', // Define el color del borde como blanco
+                    strokeThickness: 4
+                }).setDepth(200);
 
-                // this.reloadComplete = true; // Asegúrate de que el control del tween esté activo
+                this.reloadComplete = true; // Asegúrate de que el control del tween esté activo
 
-                // // Tween para mover el texto desde fuera de la pantalla hacia su posición final
-                // this.tweens.add({
-                //     targets: this.reloadText,
-                //     x: endPositionX,
-                //     duration: 1000,
-                //     ease: 'Power2',
-                //     onStart: () => {
-                //         this.reloadText.setAlpha(1);
-                //     },
-                //     onComplete: () => {
-                //         // Inicia el parpadeo una vez que el texto está en su posición final
-                //         this.tweens.add({
-                //             targets: this.reloadText,
-                //             alpha: 0.2,
-                //             yoyo: true,
-                //             repeat: 3,
-                //             duration: 500,
-                //             onComplete: () => {
-                //                 // Desvanecimiento después del parpadeo
-                //                 this.tweens.add({
-                //                     targets: this.reloadText,
-                //                     alpha: 0,
-                //                     duration: 1000,
-                //                     onComplete: () => {
-                //                         this.reloadComplete = false;
-                //                     }
-                //                 });
-                //             }
-                //         });
-                //     }
-                // });
+                // Tween para mover el texto desde fuera de la pantalla hacia su posición final
+                this.tweens.add({
+                    targets: this.reloadText,
+                    x: endPositionX,
+                    duration: 1000,
+                    ease: 'Power2',
+                    onStart: () => {
+                        this.reloadText.setAlpha(1);
+                    },
+                    onComplete: () => {
+                        // Inicia el parpadeo una vez que el texto está en su posición final
+                        this.tweens.add({
+                            targets: this.reloadText,
+                            alpha: 0.2,
+                            yoyo: true,
+                            repeat: 3,
+                            duration: 500,
+                            onComplete: () => {
+                                // Desvanecimiento después del parpadeo
+                                this.tweens.add({
+                                    targets: this.reloadText,
+                                    alpha: 0,
+                                    duration: 1000,
+                                    onComplete: () => {
+                                        this.reloadComplete = false;
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
             }
 
         }
@@ -1271,7 +1286,7 @@ export class Game extends Phaser.Scene {
 
     shootUpdateOther(shootInfo) {
         // Encuentra el equipamiento militar por ID para obtener su posición
-        const equipment = this.militaryEquipmentsRed.concat(this.militaryEquipmentsBlue).find(e => e.id === shootInfo.equipmentMilitaryId);
+        const equipment = this.militaryEquipmentsRed.concat(this.militaryEquipmentsBlue).find(e => e.id === shootInfo.originEquipmentMilitaryId);
 
         if (!equipment || !equipment.position) {
             console.error("Equipamiento militar no encontrado o sin posición.");
@@ -1285,7 +1300,7 @@ export class Game extends Phaser.Scene {
             originY: equipment.position.y,
             maxDistance: shootInfo.maxDistance,
             team: shootInfo.nickName === this.name ? this.playerRole : this.playerRole === 'RED' ? 'BLUE' : 'RED',
-            shooterId: shootInfo.equipmentMilitaryId
+            shooterId: shootInfo.originEquipmentMilitaryId
         });
 
         this.physics.moveTo(bullet, shootInfo.target.x, shootInfo.target.y, 500);
